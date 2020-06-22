@@ -1,5 +1,20 @@
 #include <daycoinissue.hpp>
 
+ACTION daycoinissue::createacct(name account_name) {
+
+  eosio::print(" daycoinissue::createacct called with account_name of ", account_name.to_string());
+
+  // accounts will only be created through the daycoinclaim account
+  require_auth( name("daycoinclaim") );
+
+  accounts_table accounts(get_self(), get_self().value);
+  account_t new_entry = account_t(account_name, current_time_point(), false, "");
+  eosio::print("new_entry looks like this: ", new_entry.get_user().to_string());
+  accounts.emplace(account_name, [&](auto & entry) {
+    entry = new_entry;
+  });
+};
+
 ACTION daycoinissue::issue(std::string message_text) {
 
   eosio::print("daycoinissue::issue was called");

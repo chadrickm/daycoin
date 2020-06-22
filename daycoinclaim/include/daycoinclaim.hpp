@@ -29,6 +29,7 @@ CONTRACT daycoinclaim : public contract {
     void clearclaimants();
     uint64_t getclaimday();
     void issue_test();
+    bool determine_day_coin_account(name account_name);
 
     TABLE messages {
       name    user;

@@ -19,10 +19,10 @@ class [[eosio::table, eosio::contract("daycoinissue")]] account_t {
 
         // ctor for setting each prop
         account_t(
-            eosio::name        _user,
-            eosio::time_point  _registered_on_timestamp,
-            bool        _is_unique_account_linked,
-            std::string      _unique_account_id) 
+            eosio::name         _user,
+            eosio::time_point   _registered_on_timestamp,
+            bool                _is_unique_account_linked,
+            std::string         _unique_account_id) 
             :
             user(_user),
             registered_on_timestamp(_registered_on_timestamp),

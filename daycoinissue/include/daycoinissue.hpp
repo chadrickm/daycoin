@@ -14,8 +14,11 @@ CONTRACT daycoinissue : public contract {
 
     ACTION hi(name from, string message);
     ACTION clear();
+
+    ACTION createacct(name account_name);
     ACTION issue(std::string message_text);
 
+    using createacct_action = action_wrapper<"createacct"_n, &daycoinissue::createacct>;
     using issue_action = action_wrapper<"issue"_n, &daycoinissue::issue>;
 
   private:
