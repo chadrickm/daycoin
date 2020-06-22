@@ -6,7 +6,8 @@ ACTION daycoinclaim::makeclaim(eosio::name account_name) {
   
   eosio::print("daycoinclaim::makeclaim called");
 
-  //require_auth(get_self());
+  require_auth(account_name);
+
   {
     daycoinissue::issue_action issue_act { "daycoinissue"_n, { get_self(), "active"_n } };
     issue_act.send("calling from makeclaim");
