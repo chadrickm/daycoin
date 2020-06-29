@@ -1,4 +1,4 @@
-#ifndef DAYCOINCLAIM
+/*#ifndef DAYCOINCLAIM
 #define DAYCOINCLAIM
 
 #include <eosio/eosio.hpp>
@@ -14,13 +14,14 @@ using namespace std;
 using namespace eosio;
 
 
-CONTRACT daycoinclaim : public contract {
+class [[eosio::contract("daycoinclaim")]] daycoinclaim : public contract {
   
   public:
   
     using contract::contract;
 
-    ACTION makeclaim(name account_name);
+    [[eosio::action]]
+    void makeclaim(name account_name);
  
   private:
 
@@ -29,9 +30,10 @@ CONTRACT daycoinclaim : public contract {
     void clearclaimants();
     uint64_t getclaimday();
     void issue_test();
-    bool determine_day_coin_account(name account_name);
+    bool determine_day_coin_account(name account_name, name scope);
+    void create_account(name account_name);
 
-    TABLE messages {
+    struct [[eosio::table]] messages {
       name    user;
       string  text;
       auto primary_key() const { return user.value; }
@@ -39,4 +41,4 @@ CONTRACT daycoinclaim : public contract {
     typedef multi_index<name("messages"), messages> messages_table;
 };
 
-#endif
+#endif*/
