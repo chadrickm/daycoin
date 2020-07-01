@@ -1,0 +1,73 @@
+#include <eosio/eosio.hpp>
+#include <timespan.hpp>
+#include <eosio/asset.hpp>
+
+#include <string>
+
+using namespace std;
+using namespace eosio;
+
+CONTRACT daycointoken : public contract {
+  public:
+    using contract::contract;
+
+    // DayCoin Ecosystem Actions
+    ACTION registeracct(name account_name, string voice_account_id, uint64_t account_name_int);
+    ACTION syncunique(name account_name);
+    ACTION makeclaim(name account_name);
+    ACTION debitdep(name account_name, uint64_t deposit_amount);
+    ACTION debitwthdrw(name account_name, uint64_t withdrawal_amount);
+    ACTION stake(name account_name, uint64_t stake_amount, timespan_days timespan);
+    ACTION unstake(uint64_t stake_id, name account_name, uint64_t withdrawal_amount);
+    ACTION proposalmake(name account_name, uint64_t amount, uint64_t number_of_months, string ipfs_address, uint64_t ipfs_hash);
+    ACTION proposalvote(name account_name, uint64_t proposal_id, uint64_t number_of_votes, bool yes);
+
+    // EOSIO.Token Actions
+    ACTION create( const name& issuer, const asset& maximum_supply);
+    ACTION issue( const name& to, const asset& quantity, const string& memo );
+    ACTION retire( const asset& quantity, const string& memo );
+    ACTION transfer( const name& from, const name& to, const asset& quantity, const string&  memo );
+    ACTION open( const name& owner, const symbol& symbol, const name& ram_payer );
+    ACTION close( const name& owner, const symbol& symbol );
+    static asset get_supply( const name& token_contract_account, const symbol_code& sym_code )
+    {
+      stats statstable( token_contract_account, sym_code.raw() );
+      const auto& st = statstable.get( sym_code.raw() );
+      return st.supply;
+    }
+    static asset get_balance( const name& token_contract_account, const name& owner, const symbol_code& sym_code )
+    {
+      accounts accountstable( token_contract_account, owner.value );
+      const auto& ac = accountstable.get( sym_code.raw() );
+      return ac.balance;
+    }
+    using create_action = eosio::action_wrapper<"create"_n, &daycointoken::create>;
+    using issue_action = eosio::action_wrapper<"issue"_n, &daycointoken::issue>;
+    using retire_action = eosio::action_wrapper<"retire"_n, &daycointoken::retire>;
+    using transfer_action = eosio::action_wrapper<"transfer"_n, &daycointoken::transfer>;
+    using open_action = eosio::action_wrapper<"open"_n, &daycointoken::open>;
+    using close_action = eosio::action_wrapper<"close"_n, &daycointoken::close>;
+
+  private:
+
+    TABLE account {
+      asset    balance;
+
+      uint64_t primary_key()const { return balance.symbol.code().raw(); }
+    };
+
+    TABLE currency_stats {
+      asset    supply;
+      asset    max_supply;
+      name     issuer;
+
+      uint64_t primary_key()const { return supply.symbol.code().raw(); }
+    };
+
+    typedef eosio::multi_index< "accounts"_n, account > accounts;
+    typedef eosio::multi_index< "stat"_n, currency_stats > stats;
+
+    void sub_balance( const name& owner, const asset& value );
+    void add_balance( const name& owner, const asset& value, const name& ram_payer );
+
+};
