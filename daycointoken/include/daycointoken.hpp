@@ -1,5 +1,5 @@
 #include <eosio/eosio.hpp>
-#include <timespan.hpp>
+//#include <timespan.hpp>
 #include <eosio/asset.hpp>
 
 #include <string>
@@ -12,15 +12,15 @@ CONTRACT daycointoken : public contract {
     using contract::contract;
 
     // DayCoin Ecosystem Actions
-    ACTION registeracct(name account_name, string voice_account_id, uint64_t account_name_int);
-    ACTION syncunique(name account_name);
-    ACTION makeclaim(name account_name);
-    ACTION debitdep(name account_name, uint64_t deposit_amount);
-    ACTION debitwthdrw(name account_name, uint64_t withdrawal_amount);
-    ACTION stake(name account_name, uint64_t stake_amount, timespan_days timespan);
-    ACTION unstake(uint64_t stake_id, name account_name, uint64_t withdrawal_amount);
-    ACTION proposalmake(name account_name, uint64_t amount, uint64_t number_of_months, string ipfs_address, uint64_t ipfs_hash);
-    ACTION proposalvote(name account_name, uint64_t proposal_id, uint64_t number_of_votes, bool yes);
+    ACTION registeracct(const name& account_name, const string& voice_account_name);
+    ACTION syncunique(const name& account_name);
+    ACTION makeclaim(const name& account_name);
+    ACTION debitdep(const name& account_name, uint64_t deposit_amount);
+    ACTION debitwthdrw(const name& account_name, uint64_t withdrawal_amount);
+    //ACTION stake(const name& account_name, uint64_t stake_amount, timespan_days timespan);
+    ACTION unstake(uint64_t stake_id, const name& account_name, uint64_t withdrawal_amount);
+    ACTION proposalmake(const name& account_name, uint64_t amount, uint64_t number_of_months, const string& ipfs_address, uint64_t ipfs_hash);
+    ACTION proposalvote(const name& account_name, uint64_t proposal_id, uint64_t number_of_votes, bool yes);
 
     // EOSIO.Token Actions
     ACTION create( const name& issuer, const asset& maximum_supply);
@@ -50,11 +50,30 @@ CONTRACT daycointoken : public contract {
 
   private:
 
+    TABLE claimants {
+      uint64_t claim_day;
+      eosio::name claimant;
+
+      uint64_t primary_key()const { return claimant.value; }
+    };
+    typedef eosio::multi_index< "claimants"_n, claimants > claimants_table;
+
+    TABLE day_accounts {
+      name account_name;
+      string voice_account_name;
+      string embedded_code;
+      bool is_synced;
+
+      uint64_t primary_key()const { return account_name.value; }
+    };
+    typedef eosio::multi_index< "dayaccounts"_n, day_accounts > day_accounts_table;
+
     TABLE account {
       asset    balance;
 
       uint64_t primary_key()const { return balance.symbol.code().raw(); }
     };
+    typedef eosio::multi_index< "accounts"_n, account > accounts;
 
     TABLE currency_stats {
       asset    supply;
@@ -63,8 +82,6 @@ CONTRACT daycointoken : public contract {
 
       uint64_t primary_key()const { return supply.symbol.code().raw(); }
     };
-
-    typedef eosio::multi_index< "accounts"_n, account > accounts;
     typedef eosio::multi_index< "stat"_n, currency_stats > stats;
 
     void sub_balance( const name& owner, const asset& value );

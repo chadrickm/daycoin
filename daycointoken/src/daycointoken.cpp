@@ -1,22 +1,65 @@
 #include <daycointoken.hpp>
 
-ACTION daycointoken::registeracct(name account_name, string voice_account_id, uint64_t account_name_int) {}
+ACTION daycointoken::registeracct(const name& account_name, const string& voice_account_name)
+{
+   require_auth( account_name );
 
-ACTION daycointoken::syncunique(name account_name) {}
+   day_accounts_table accounts( get_self(), get_self().value );
+   auto iterator = accounts.find( account_name.value );
+   check( iterator == accounts.end(), "Day account already exists." );
 
-ACTION daycointoken::makeclaim(name account_name) {}
+   accounts.emplace( get_self(), [&]( auto& account ) {
+      account.account_name = account_name;
+      account.voice_account_name = voice_account_name;
+      account.embedded_code = "test";
+      account.is_synced = false;
+   });
+}
 
-ACTION daycointoken::debitdep(name account_name, uint64_t deposit_amount) {}
+ACTION daycointoken::syncunique(const name& account_name) 
+{
+   require_auth( account_name );
 
-ACTION daycointoken::debitwthdrw(name account_name, uint64_t withdrawal_amount) {}
+   day_accounts_table accounts( get_self(), get_self().value );
+   auto iterator = accounts.find( account_name.value );
+   check( iterator != accounts.end(), "Account could not be found." );
 
-ACTION daycointoken::stake(name account_name, uint64_t stake_amount, timespan_days timespan) {}
+   accounts.modify(iterator, get_self(), [&]( auto& account ) {
+      account.is_synced = true;
+   });
+}
 
-ACTION daycointoken::unstake(uint64_t stake_id, name account_name, uint64_t withdrawal_amount) {}
+ACTION daycointoken::makeclaim(const name& account_name) 
+{
+   
+}
 
-ACTION daycointoken::proposalmake(name account_name, uint64_t amount, uint64_t number_of_months, string ipfs_address, uint64_t ipfs_hash) {}
+ACTION daycointoken::debitdep(const name& account_name, uint64_t deposit_amount) 
+{
 
-ACTION daycointoken::proposalvote(name account_name, uint64_t proposal_id, uint64_t number_of_votes, bool yes) {}
+}
+
+ACTION daycointoken::debitwthdrw(const name& account_name, uint64_t withdrawal_amount) 
+{
+
+}
+
+//ACTION daycointoken::stake(const name& account_name, uint64_t stake_amount, timespan_days timespan) {}
+
+ACTION daycointoken::unstake(uint64_t stake_id, const name& account_name, uint64_t withdrawal_amount) 
+{
+
+}
+
+ACTION daycointoken::proposalmake(const name& account_name, uint64_t amount, uint64_t number_of_months, const string& ipfs_address, uint64_t ipfs_hash) 
+{
+
+}
+
+ACTION daycointoken::proposalvote(const name& account_name, uint64_t proposal_id, uint64_t number_of_votes, bool yes) 
+{
+
+}
 
 ACTION daycointoken::create( const name& issuer, const asset& maximum_supply )
 {
@@ -168,5 +211,5 @@ void daycointoken::add_balance( const name& owner, const asset& value, const nam
 }
 
 EOSIO_DISPATCH(daycointoken, 
-    (registeracct)(syncunique)(makeclaim)(debitdep)(debitwthdrw)(stake)(unstake)(proposalmake)(proposalvote)
+    (registeracct)(syncunique)(makeclaim)(debitdep)(debitwthdrw)(unstake)(proposalmake)(proposalvote)//(stake)
     (create)(issue)(retire)(transfer)(open)(close))
