@@ -11,27 +11,57 @@ ACTION daycointoken::registeracct(const name& account_name, const string& voice_
    accounts.emplace( get_self(), [&]( auto& account ) {
       account.account_name = account_name;
       account.voice_account_name = voice_account_name;
-      account.embedded_code = "test";
+      account.voice_post_hash = "test";
       account.is_synced = false;
    });
 }
 
-ACTION daycointoken::syncunique(const name& account_name) 
+ACTION daycointoken::clearallacct()
+{
+   require_auth( name("daycoinadmin") );
+
+   day_accounts_table accounts( get_self(), get_self().value );
+   auto iterator = accounts.begin( );
+   while (iterator != accounts.end()) {
+      iterator = accounts.erase(iterator);
+   }
+}
+
+ACTION daycointoken::valvoiceacct(const name& validator, string post_hash, const name& validatee) 
+{
+   require_auth( validator );
+
+   day_accounts_table accounts( get_self(), get_self().value );
+   auto iterator = accounts.find( validatee.value );
+   check( iterator != accounts.end(), "Account could not be found." );
+
+   bool account_is_validated = iterator->is_synced;
+   bool hashes_are_equal = post_hash == iterator->voice_post_hash;
+   if (!account_is_validated && hashes_are_equal) {
+      accounts.modify(iterator, get_self(), [&]( auto& account ) {
+         account.is_synced = true;
+      });
+   }
+}
+
+ACTION daycointoken::makeclaim( const name& account_name ) 
 {
    require_auth( account_name );
 
-   day_accounts_table accounts( get_self(), get_self().value );
-   auto iterator = accounts.find( account_name.value );
-   check( iterator != accounts.end(), "Account could not be found." );
-
-   accounts.modify(iterator, get_self(), [&]( auto& account ) {
-      account.is_synced = true;
-   });
+   daycointoken::makeclaim_validate_account(account_name); // validate that the account_name exists
+   daycointoken::makeclaim_record_claimant(account_name); // record claimant if the claim doesn't already exist for the day
+   daycointoken::makeclaim_process_claims(account_name); // process claims if it's the next day
 }
 
-ACTION daycointoken::makeclaim(const name& account_name) 
+ACTION daycointoken::clrclaimants()
 {
-   
+   require_auth( name("daycoinadmin") );
+
+   claimants_table claimants( get_self(), get_self().value );
+   auto iterator = claimants.begin( );
+   while (iterator != claimants.end()) {
+      iterator = claimants.erase(iterator);
+   }
 }
 
 ACTION daycointoken::debitdep(const name& account_name, uint64_t deposit_amount) 
@@ -63,7 +93,7 @@ ACTION daycointoken::proposalvote(const name& account_name, uint64_t proposal_id
 
 ACTION daycointoken::create( const name& issuer, const asset& maximum_supply )
 {
-    require_auth( get_self() );
+    require_auth( name("daycoinadmin") );
 
     auto sym = maximum_supply.symbol;
     check( sym.is_valid(), "invalid symbol name" );
@@ -210,6 +240,70 @@ void daycointoken::add_balance( const name& owner, const asset& value, const nam
    }
 }
 
+void daycointoken::makeclaim_validate_account( const name& account_name )
+{
+   day_accounts_table dayaccounts( get_self(), get_self().value );
+   auto dayaccounts_iterator = dayaccounts.find( account_name.value );
+   check( dayaccounts_iterator != dayaccounts.end(), "Account does not exist." );
+   check( dayaccounts_iterator->is_synced, "Account must by synced with Voice to make claim." );
+}
+
+void daycointoken::makeclaim_record_claimant( const name& account_name )
+{
+   auto globals = global_properties.get_or_create(get_self(), globalsrow);
+   
+   // if this is the first time we are running the app
+   if (globals.current_day == 0) {
+      globals.current_day = 1;
+   }
+   
+   //globals.current_days_claimants_count = globals.current_days_claimants_count + 1;
+   global_properties.set(globals, get_self());
+
+   claimants_table claimants( get_self(), get_self().value );
+   auto claimants_iterator = claimants.find( account_name.value );
+   if (claimants_iterator == claimants.end() ) {
+      // this account has not claimed today
+      claimants.emplace( get_self(), [&]( auto& claimant ) {
+         claimant.claim_day = globals.current_day;
+         claimant.claimant = account_name;
+      });
+   }
+}
+
+void daycointoken::makeclaim_process_claims( const name& account_name )
+{
+   auto globals = global_properties.get();
+
+   bool is_tomorrow = true;
+   if (is_tomorrow) {
+      uint64_t claimants_count = 0;
+      claimants_table claimants( get_self(), get_self().value );
+      auto claimants_by_day = claimants.get_index< "byday"_n >();
+      auto claimants_lower = claimants_by_day.lower_bound(globals.current_day);
+      auto claimants_upper = claimants_by_day.upper_bound(globals.current_day);
+      for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
+         claimants_count++;
+      }
+      
+      claimants_count = 3;
+      float slice_size = (.8 / claimants_count);
+      float total_of_slices = slice_size * claimants_count;
+      float remainder = .8 - total_of_slices;
+      float why_remainder = (.8 - remainder) / claimants_count;
+      if (why_remainder == slice_size) {
+         remainder = 0;
+      }
+
+      print("slice_size ", slice_size);
+      print("; total_of_slices ", total_of_slices);
+      print("; remainder of ", remainder);
+      print("; slice size with remainder: ", why_remainder);
+      
+   }
+}
+
+
 EOSIO_DISPATCH(daycointoken, 
-    (registeracct)(syncunique)(makeclaim)(debitdep)(debitwthdrw)(unstake)(proposalmake)(proposalvote)//(stake)
+    (registeracct)(makeclaim)(debitdep)(debitwthdrw)(unstake)(proposalmake)(proposalvote)(clearallacct)(valvoiceacct)(clrclaimants)//(stake)
     (create)(issue)(retire)(transfer)(open)(close))
