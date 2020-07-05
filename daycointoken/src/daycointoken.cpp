@@ -55,7 +55,7 @@ ACTION daycointoken::makeclaim( const name& account_name )
 
 ACTION daycointoken::clrclaimants()
 {
-   require_auth( name("daycoinadmin") );
+   require_auth( get_self() );
 
    claimants_table claimants( get_self(), get_self().value );
    auto iterator = claimants.begin( );
@@ -273,6 +273,8 @@ void daycointoken::makeclaim_record_claimant( const name& account_name )
 
 void daycointoken::makeclaim_process_claims( const name& account_name )
 {
+   require_auth( account_name );
+
    auto globals = global_properties.get();
 
    bool is_tomorrow = true;
@@ -285,21 +287,38 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
       for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
          claimants_count++;
       }
-      
-      claimants_count = 3;
-      float slice_size = (.8 / claimants_count);
-      float total_of_slices = slice_size * claimants_count;
-      float remainder = .8 - total_of_slices;
-      float why_remainder = (.8 - remainder) / claimants_count;
-      if (why_remainder == slice_size) {
-         remainder = 0;
+
+      float wps = .1;
+      float erps = .1;
+      float slice_size = 0.0;
+      if (claimants_count < 10) {
+         slice_size = floorf( ( 1.0 / (claimants_count + 2) ) * 1000000000000000000 ) / 1000000000000000000;
+         wps = slice_size;
+         erps = slice_size;
+      } else {
+         slice_size = floorf( ( .8 / claimants_count ) * 1000000000000000000 ) / 1000000000000000000;
       }
 
-      print("slice_size ", slice_size);
-      print("; total_of_slices ", total_of_slices);
-      print("; remainder of ", remainder);
-      print("; slice size with remainder: ", why_remainder);
-      
+      float slice_total = (slice_size * claimants_count) + wps + erps;
+
+      //print("slice_total ", slice_total);
+
+      claimants_lower = claimants_by_day.lower_bound(globals.current_day);
+      claimants_upper = claimants_by_day.upper_bound(globals.current_day);
+      globals.current_day++;
+      global_properties.set(globals, get_self());
+      for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
+         print(i->claimant, ", ");
+         // TODO: issue slice_size DAY to each claimant account
+      }
+
+      auto iterator = claimants.begin( );
+      while (iterator != claimants.end()) {
+         iterator = claimants.erase(iterator);
+      }
+
+      daycointoken::makeclaim_validate_account(account_name); // validate that the account_name exists
+      daycointoken::makeclaim_record_claimant(account_name); // record claimant if the claim doesn't already exist for the day
    }
 }
 

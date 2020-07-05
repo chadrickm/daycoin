@@ -4,7 +4,7 @@
 #include <eosio/singleton.hpp>
 
 #include <string>
-#include <cmath>
+#include <math.h>
 
 using namespace std;
 using namespace eosio;
