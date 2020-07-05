@@ -64,6 +64,15 @@ ACTION daycointoken::clrclaimants()
    }
 }
 
+ACTION daycointoken::clearglobals()
+{
+   //bool globals_exists = global_properties.exists();
+   //print("globals_exists ", globals_exists);
+   global_properties.remove();
+   bool globals_exists = global_properties.exists();
+   print("globals_exists ", globals_exists);
+}
+
 ACTION daycointoken::debitdep(const name& account_name, uint64_t deposit_amount) 
 {
 
@@ -255,6 +264,7 @@ void daycointoken::makeclaim_record_claimant( const name& account_name )
    // if this is the first time we are running the app
    if (globals.current_day == 0) {
       globals.current_day = 1;
+      globals.last_time_processed = 0;
    }
    
    //globals.current_days_claimants_count = globals.current_days_claimants_count + 1;
@@ -276,14 +286,17 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
    require_auth( account_name );
 
    auto globals = global_properties.get();
+   uint64_t seconds_since_epoch = current_time_point().sec_since_epoch();
+   bool is_past_next_processed_time = globals.last_time_processed == 0 || seconds_since_epoch > globals.last_time_processed + 30;
 
-   bool is_tomorrow = true;
-   if (is_tomorrow) {
+   uint64_t current_day = globals.current_day;
+
+   if (is_past_next_processed_time) {
       uint64_t claimants_count = 0;
       claimants_table claimants( get_self(), get_self().value );
       auto claimants_by_day = claimants.get_index< "byday"_n >();
-      auto claimants_lower = claimants_by_day.lower_bound(globals.current_day);
-      auto claimants_upper = claimants_by_day.upper_bound(globals.current_day);
+      auto claimants_lower = claimants_by_day.lower_bound(current_day);
+      auto claimants_upper = claimants_by_day.upper_bound(current_day);
       for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
          claimants_count++;
       }
@@ -303,9 +316,11 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
 
       //print("slice_total ", slice_total);
 
-      claimants_lower = claimants_by_day.lower_bound(globals.current_day);
-      claimants_upper = claimants_by_day.upper_bound(globals.current_day);
-      globals.current_day++;
+      claimants_lower = claimants_by_day.lower_bound(current_day);
+      claimants_upper = claimants_by_day.upper_bound(current_day);
+      current_day++;
+      globals.current_day = current_day;
+      globals.last_time_processed = seconds_since_epoch;
       global_properties.set(globals, get_self());
       for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
          print(i->claimant, ", ");
@@ -324,5 +339,5 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
 
 
 EOSIO_DISPATCH(daycointoken, 
-    (registeracct)(makeclaim)(debitdep)(debitwthdrw)(unstake)(proposalmake)(proposalvote)(clearallacct)(valvoiceacct)(clrclaimants)//(stake)
+    (registeracct)(makeclaim)(debitdep)(debitwthdrw)(unstake)(proposalmake)(proposalvote)(clearallacct)(valvoiceacct)(clrclaimants)(clearglobals)//(stake)
     (create)(issue)(retire)(transfer)(open)(close))

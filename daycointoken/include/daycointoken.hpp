@@ -22,6 +22,7 @@ CONTRACT daycointoken : public contract {
     ACTION valvoiceacct(const name& validator, string post_hash, const name& validatee);
     ACTION makeclaim(const name& account_name);
     ACTION clrclaimants();
+    ACTION clearglobals();
     ACTION debitdep(const name& account_name, uint64_t deposit_amount);
     ACTION debitwthdrw(const name& account_name, uint64_t withdrawal_amount);
     //ACTION stake(const name& account_name, uint64_t stake_amount, timespan_days timespan);
@@ -59,6 +60,7 @@ CONTRACT daycointoken : public contract {
 
     TABLE globals {
       uint64_t current_day;
+      uint64_t last_time_processed;
     } globalsrow;
     using singleton_type = eosio::singleton<"globals"_n, globals>;
     singleton_type global_properties;
