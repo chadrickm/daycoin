@@ -29,7 +29,7 @@ ACTION daycointoken::clearallacct()
 
 ACTION daycointoken::valvoiceacct(const name& validator, string post_hash, const name& validatee) 
 {
-   require_auth( validator );
+   //require_auth( validator );
 
    day_accounts_table accounts( get_self(), get_self().value );
    auto iterator = accounts.find( validatee.value );
@@ -46,7 +46,7 @@ ACTION daycointoken::valvoiceacct(const name& validator, string post_hash, const
 
 ACTION daycointoken::makeclaim( const name& account_name ) 
 {
-   require_auth( account_name );
+   //require_auth( account_name );
 
    daycointoken::makeclaim_validate_account(account_name); // validate that the account_name exists
    daycointoken::makeclaim_record_claimant(account_name); // record claimant if the claim doesn't already exist for the day
@@ -287,11 +287,12 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
 
    auto globals = global_properties.get();
    uint64_t seconds_since_epoch = current_time_point().sec_since_epoch();
-   bool is_past_next_processed_time = globals.last_time_processed == 0 || seconds_since_epoch > globals.last_time_processed + 30;
+   bool is_past_next_processed_time = globals.last_time_processed == 0 || seconds_since_epoch > globals.last_time_processed + 60;
 
    uint64_t current_day = globals.current_day;
 
    if (is_past_next_processed_time) {
+
       uint64_t claimants_count = 0;
       claimants_table claimants( get_self(), get_self().value );
       auto claimants_by_day = claimants.get_index< "byday"_n >();
@@ -301,20 +302,22 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
          claimants_count++;
       }
 
-      float wps = .1;
-      float erps = .1;
+      float wps_amount = 0;
+      float erps_amount = 0;
       float slice_size = 0.0;
       if (claimants_count < 10) {
-         slice_size = floorf( ( 1.0 / (claimants_count + 2) ) * 1000000000000000000 ) / 1000000000000000000;
-         wps = slice_size;
-         erps = slice_size;
+         slice_size = 10000000000000 / (claimants_count + 2);
+         wps_amount = slice_size;
+         erps_amount = slice_size;
       } else {
-         slice_size = floorf( ( .8 / claimants_count ) * 1000000000000000000 ) / 1000000000000000000;
+         slice_size = 8000000000000 / claimants_count;
+         wps_amount = 1000000000000;
+         erps_amount = 1000000000000;
       }
 
-      float slice_total = (slice_size * claimants_count) + wps + erps;
+      float slice_total = (slice_size * claimants_count) + wps_amount + erps_amount;
 
-      //print("slice_total ", slice_total);
+      print("Slice Total: ", slice_total);
 
       claimants_lower = claimants_by_day.lower_bound(current_day);
       claimants_upper = claimants_by_day.upper_bound(current_day);
@@ -322,10 +325,41 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
       globals.current_day = current_day;
       globals.last_time_processed = seconds_since_epoch;
       global_properties.set(globals, get_self());
+      print("; Slice Size: ", slice_size);
+      
+      action(
+         permission_level { get_self(), "active"_n },
+         get_self(),
+         "issue"_n,
+         make_tuple( get_self(), asset(slice_total, symbol(symbol_code("DAY"), 13)), "")
+      ).send();
+      //daycointoken::issue( "daycointoken"_n, asset(slice_total, symbol(symbol_code("DAY"), 13)), "" );
+      
       for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
          print(i->claimant, ", ");
-         // TODO: issue slice_size DAY to each claimant account
+         /*action(
+            permission_level { get_self(), "active"_n },
+            get_self(),
+            "transfer"_n,
+            make_tuple( get_self(), i->claimant, asset(slice_size, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" )
+         ).send();*/
+         //daycointoken::transfer( "daycointoken"_n, i->claimant, asset(slice_size, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
       }
+      /*action(
+         permission_level { get_self(), "active"_n },
+         get_self(),
+         "transfer"_n,
+         make_tuple( get_self(), "daycoinerps1"_n, asset(erps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" )
+      ).send();
+      //daycointoken::transfer( "daycointoken"_n, "daycoinerps1"_n, asset(erps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
+      action(
+         permission_level { get_self(), "active"_n },
+         get_self(),
+         "transfer"_n,
+         make_tuple( get_self(), "daycoinwpsio"_n, asset(wps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" )
+      ).send();
+      //daycointoken::transfer( "daycointoken"_n, "daycoinwpsio"_n, asset(wps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
+      */
 
       auto iterator = claimants.begin( );
       while (iterator != claimants.end()) {
