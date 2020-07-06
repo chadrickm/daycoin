@@ -65,6 +65,20 @@ CONTRACT daycointoken : public contract {
     using singleton_type = eosio::singleton<"globals"_n, globals>;
     singleton_type global_properties;
 
+    TABLE claims {
+      uint64_t claim_day;
+      name winning_claim;
+      uint64_t slice_size;
+      uint64_t claimant_count;
+      uint64_t winner_bonus_amount;
+      uint64_t wps_amount;
+      uint64_t erps_amount;
+      uint64_t slice_total;
+      uint64_t issuer_balance;
+
+      uint64_t primary_key() const { return claim_day; }
+    };
+    typedef eosio::multi_index< "claims"_n, claims > claims_table;
 
     TABLE claimants {
       uint64_t claim_day;
@@ -107,9 +121,20 @@ CONTRACT daycointoken : public contract {
     };
     typedef eosio::multi_index< "stat"_n, currency_stats > stats;
 
-
+    void issue_day( const name& to, const asset& quantity, const string& memo );
+    void transfer_day(const name& from, const name& to, const asset& quantity, const string& memo);
     void sub_balance( const name& owner, const asset& value );
     void add_balance( const name& owner, const asset& value, const name& ram_payer );
+    void record_winning_claim( 
+      uint64_t claim_day,
+      name winning_claim,
+      uint64_t slice_size,
+      uint64_t claimant_count,
+      uint64_t winner_bonus_amount,
+      uint64_t wps_amount, 
+      uint64_t erps_amount, 
+      uint64_t slice_total ); 
+      //uint64_t issuer_balance );
     
     void makeclaim_validate_account( const name& account_name );
     void makeclaim_record_claimant( const name& account_name );

@@ -122,28 +122,39 @@ ACTION daycointoken::create( const name& issuer, const asset& maximum_supply )
 
 ACTION daycointoken::issue( const name& to, const asset& quantity, const string& memo )
 {
-    auto sym = quantity.symbol;
-    check( sym.is_valid(), "invalid symbol name" );
-    check( memo.size() <= 256, "memo has more than 256 bytes" );
+   auto sym = quantity.symbol;
+   stats statstable( get_self(), sym.code().raw() );
+   auto existing = statstable.find( sym.code().raw() );
+   check( existing != statstable.end(), "token with symbol does not exist, create token before issue" );
+   // I think this is a pointer and I don't get why it's doing it this way?
+   const auto& st = *existing;
+   require_auth( st.issuer );
+   daycointoken::issue_day(to, quantity, memo);
+}
 
-    stats statstable( get_self(), sym.code().raw() );
-    auto existing = statstable.find( sym.code().raw() );
-    check( existing != statstable.end(), "token with symbol does not exist, create token before issue" );
-    const auto& st = *existing;
-    check( to == st.issuer, "tokens can only be issued to issuer account" );
+void daycointoken::issue_day(const name& to, const asset& quantity, const string& memo )
+{
+   auto sym = quantity.symbol;
+   check( sym.is_valid(), "invalid symbol name" );
+   check( memo.size() <= 256, "memo has more than 256 bytes" );
 
-    require_auth( st.issuer );
-    check( quantity.is_valid(), "invalid quantity" );
-    check( quantity.amount > 0, "must issue positive quantity" );
+   stats statstable( get_self(), sym.code().raw() );
+   auto existing = statstable.find( sym.code().raw() );
+   check( existing != statstable.end(), "token with symbol does not exist, create token before issue" );
+   const auto& st = *existing;
+   check( to == st.issuer, "tokens can only be issued to issuer account" );
 
-    check( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
-    check( quantity.amount <= st.max_supply.amount - st.supply.amount, "quantity exceeds available supply");
+   check( quantity.is_valid(), "invalid quantity" );
+   check( quantity.amount > 0, "must issue positive quantity" );
 
-    statstable.modify( st, same_payer, [&]( auto& s ) {
-       s.supply += quantity;
-    });
+   check( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
+   check( quantity.amount <= st.max_supply.amount - st.supply.amount, "quantity exceeds available supply");
 
-    add_balance( st.issuer, quantity, st.issuer );
+   statstable.modify( st, same_payer, [&]( auto& s ) {
+      s.supply += quantity;
+   });
+
+   add_balance( st.issuer, quantity, st.issuer );
 }
 
 ACTION daycointoken::retire( const asset& quantity, const string& memo )
@@ -172,25 +183,31 @@ ACTION daycointoken::retire( const asset& quantity, const string& memo )
 
 ACTION daycointoken::transfer( const name& from, const name& to, const asset& quantity, const string& memo )
 {
-    check( from != to, "cannot transfer to self" );
-    require_auth( from );
-    check( is_account( to ), "to account does not exist");
-    auto sym = quantity.symbol.code();
-    stats statstable( get_self(), sym.raw() );
-    const auto& st = statstable.get( sym.raw() );
+   require_auth(from);
+   daycointoken::transfer_day(from, to, quantity, memo);
+}
 
-    require_recipient( from );
-    require_recipient( to );
+void daycointoken::transfer_day(const name& from, const name& to, const asset& quantity, const string& memo)
+{
+   check( from != to, "cannot transfer to self" );
+   //require_auth( from );
+   check( is_account( to ), "to account does not exist");
+   auto sym = quantity.symbol.code();
+   stats statstable( get_self(), sym.raw() );
+   const auto& st = statstable.get( sym.raw() );
 
-    check( quantity.is_valid(), "invalid quantity" );
-    check( quantity.amount > 0, "must transfer positive quantity" );
-    check( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
-    check( memo.size() <= 256, "memo has more than 256 bytes" );
+   require_recipient( from );
+   require_recipient( to );
 
-    auto payer = has_auth( to ) ? to : from;
+   check( quantity.is_valid(), "invalid quantity" );
+   check( quantity.amount > 0, "must transfer positive quantity" );
+   check( quantity.symbol == st.supply.symbol, "symbol precision mismatch" );
+   check( memo.size() <= 256, "memo has more than 256 bytes" );
 
-    sub_balance( from, quantity );
-    add_balance( to, quantity, payer );
+   auto payer = has_auth( to ) ? to : from;
+
+   sub_balance( from, quantity );
+   add_balance( to, quantity, payer );
 }
 
 ACTION daycointoken::open( const name& owner, const symbol& symbol, const name& ram_payer )
@@ -302,38 +319,43 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
          claimants_count++;
       }
 
-      float wps_amount = 0;
-      float erps_amount = 0;
-      float slice_size = 0.0;
+      uint64_t wps_amount = 0;
+      uint64_t erps_amount = 0;
+      uint64_t winner_amount = 0;
+      uint64_t slice_size = 0;
       if (claimants_count < 10) {
-         slice_size = 10000000000000 / (claimants_count + 2);
+         slice_size = 10000000000000 / (claimants_count + 3);
          wps_amount = slice_size;
          erps_amount = slice_size;
+         winner_amount = slice_size;
       } else {
-         slice_size = 8000000000000 / claimants_count;
+         slice_size = 8000000000000 / (claimants_count + 1);
          wps_amount = 1000000000000;
          erps_amount = 1000000000000;
+         winner_amount = slice_size;
       }
 
-      float slice_total = (slice_size * claimants_count) + wps_amount + erps_amount;
-
-      print("Slice Total: ", slice_total);
+      uint64_t slice_total = (slice_size * claimants_count) + wps_amount + erps_amount + winner_amount;
 
       claimants_lower = claimants_by_day.lower_bound(current_day);
       claimants_upper = claimants_by_day.upper_bound(current_day);
+      uint64_t processed_claim_day = current_day;
       current_day++;
       globals.current_day = current_day;
       globals.last_time_processed = seconds_since_epoch;
       global_properties.set(globals, get_self());
-      print("; Slice Size: ", slice_size);
       
+      /* 
+      /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+      ////// for whatever reason I cannot call the inline issue action so I've written my own helper function that issues DAY /////////
+      /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
       action(
-         permission_level { get_self(), "active"_n },
-         get_self(),
+         permission_level { "daycointoken"_n, "active"_n },
+         "daycointoken"_n,
          "issue"_n,
-         make_tuple( get_self(), asset(slice_total, symbol(symbol_code("DAY"), 13)), "")
-      ).send();
-      //daycointoken::issue( "daycointoken"_n, asset(slice_total, symbol(symbol_code("DAY"), 13)), "" );
+         make_tuple( "daycointoken"_n, asset(slice_total, symbol(symbol_code("DAY"), 13)), "")
+      ).send();*/
+      daycointoken::issue_day( "daycointoken"_n, asset(slice_total, symbol(symbol_code("DAY"), 13)), "" );
       
       for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
          print(i->claimant, ", ");
@@ -343,23 +365,37 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
             "transfer"_n,
             make_tuple( get_self(), i->claimant, asset(slice_size, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" )
          ).send();*/
-         //daycointoken::transfer( "daycointoken"_n, i->claimant, asset(slice_size, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
+         float slice_amount = slice_size;
+         if (i->claimant == account_name) {
+            slice_amount = slice_amount + winner_amount;
+         }
+         daycointoken::transfer_day( "daycointoken"_n, i->claimant, asset(slice_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
       }
       /*action(
          permission_level { get_self(), "active"_n },
          get_self(),
          "transfer"_n,
          make_tuple( get_self(), "daycoinerps1"_n, asset(erps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" )
-      ).send();
-      //daycointoken::transfer( "daycointoken"_n, "daycoinerps1"_n, asset(erps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
-      action(
+      ).send();*/
+      daycointoken::transfer_day( "daycointoken"_n, "daycoinerps1"_n, asset(erps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
+      /*action(
          permission_level { get_self(), "active"_n },
          get_self(),
          "transfer"_n,
          make_tuple( get_self(), "daycoinwpsio"_n, asset(wps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" )
-      ).send();
-      //daycointoken::transfer( "daycointoken"_n, "daycoinwpsio"_n, asset(wps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
-      */
+      ).send();*/
+      daycointoken::transfer_day( "daycointoken"_n, "daycoinwpsio"_n, asset(wps_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
+
+      daycointoken::record_winning_claim( 
+         processed_claim_day,
+         account_name,
+         slice_size,
+         claimants_count,
+         winner_amount,
+         wps_amount, 
+         erps_amount, 
+         slice_total );
+         //uint64_t issuer_balance );
 
       auto iterator = claimants.begin( );
       while (iterator != claimants.end()) {
@@ -369,6 +405,32 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
       daycointoken::makeclaim_validate_account(account_name); // validate that the account_name exists
       daycointoken::makeclaim_record_claimant(account_name); // record claimant if the claim doesn't already exist for the day
    }
+}
+
+void daycointoken::record_winning_claim( 
+   uint64_t claim_day,
+   name winning_claim,
+   uint64_t slice_size,
+   uint64_t claimant_count,
+   uint64_t winner_bonus_amount,
+   uint64_t wps_amount, 
+   uint64_t erps_amount, 
+   uint64_t slice_total )
+{
+   claims_table claims( get_self(), get_self().value );
+   auto iterator = claims.find( claim_day );
+   check( iterator == claims.end(), "Claim already recorded for this day." );
+
+   claims.emplace( get_self(), [&]( auto& claim ) {
+      claim.claim_day = claim_day;
+      claim.winning_claim = winning_claim;
+      claim.slice_size = slice_size;
+      claim.claimant_count = claimant_count;
+      claim.winner_bonus_amount = winner_bonus_amount;
+      claim.wps_amount = wps_amount;
+      claim.erps_amount = erps_amount;
+      claim.slice_total = slice_total;
+   });
 }
 
 
