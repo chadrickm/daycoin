@@ -191,7 +191,10 @@ void daycointoken::transfer_day(const name& from, const name& to, const asset& q
 {
    check( from != to, "cannot transfer to self" );
    //require_auth( from );
-   check( is_account( to ), "to account does not exist");
+   string to_account_message = "to account (";
+   to_account_message += to.to_string();
+   to_account_message += ") does not exist.";
+   check( is_account( to ), to_account_message);
    auto sym = quantity.symbol.code();
    stats statstable( get_self(), sym.raw() );
    const auto& st = statstable.get( sym.raw() );
@@ -278,12 +281,6 @@ void daycointoken::makeclaim_record_claimant( const name& account_name )
 {
    auto globals = global_properties.get_or_create(get_self(), globalsrow);
    
-   // if this is the first time we are running the app
-   if (globals.current_day == 0) {
-      globals.current_day = 1;
-      globals.last_time_processed = 0;
-   }
-   
    //globals.current_days_claimants_count = globals.current_days_claimants_count + 1;
    global_properties.set(globals, get_self());
 
@@ -304,7 +301,9 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
 
    auto globals = global_properties.get();
    uint64_t seconds_since_epoch = current_time_point().sec_since_epoch();
-   bool is_past_next_processed_time = globals.last_time_processed == 0 || seconds_since_epoch > globals.last_time_processed + 60;
+   bool is_past_next_processed_time = 
+      globals.last_time_processed == 0 || 
+      seconds_since_epoch > (globals.last_time_processed + globals.claim_span_seconds);
 
    uint64_t current_day = globals.current_day;
 
@@ -323,15 +322,16 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
       uint64_t erps_amount = 0;
       uint64_t winner_amount = 0;
       uint64_t slice_size = 0;
+      
       if (claimants_count < 10) {
-         slice_size = 10000000000000 / (claimants_count + 3);
+         slice_size = globals.issue_amount / (claimants_count + 3); // 3 is for the wps, erps, and winner
          wps_amount = slice_size;
          erps_amount = slice_size;
          winner_amount = slice_size;
       } else {
-         slice_size = 8000000000000 / (claimants_count + 1);
-         wps_amount = 1000000000000;
-         erps_amount = 1000000000000;
+         wps_amount = globals.issue_amount * globals.wps_percent;
+         erps_amount = globals.issue_amount * globals.erps_percent;
+         slice_size = (globals.issue_amount - wps_amount - erps_amount) / (claimants_count + 1); // 1 is for winner
          winner_amount = slice_size;
       }
 

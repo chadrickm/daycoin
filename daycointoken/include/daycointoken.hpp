@@ -59,8 +59,12 @@ CONTRACT daycointoken : public contract {
   private:
 
     TABLE globals {
-      uint64_t current_day;
-      uint64_t last_time_processed;
+      uint64_t current_day = 0;
+      uint64_t last_time_processed = 0;
+      uint64_t claim_span_seconds = 120;
+      float wps_percent = .01;
+      float erps_percent = .01;
+      uint64_t issue_amount = 10000000000000; // 1.0000000000000
     } globalsrow;
     using singleton_type = eosio::singleton<"globals"_n, globals>;
     singleton_type global_properties;
