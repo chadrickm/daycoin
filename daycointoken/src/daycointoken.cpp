@@ -247,7 +247,12 @@ void daycointoken::sub_balance( const name& owner, const asset& value ) {
    accounts from_acnts( get_self(), owner.value );
 
    const auto& from = from_acnts.get( value.symbol.code().raw(), "no balance object found" );
-   check( from.balance.amount >= value.amount, "overdrawn balance" );
+   string overdrawn_message = "overdrawn balance - ";
+   overdrawn_message += "from.balance.amount: ";
+   overdrawn_message += to_string(from.balance.amount);
+   overdrawn_message += "; value.amount: ";
+   overdrawn_message += to_string(value.amount);
+   check( from.balance.amount >= value.amount, overdrawn_message );
 
    from_acnts.modify( from, owner, [&]( auto& a ) {
          a.balance -= value;
@@ -300,7 +305,9 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
    require_auth( account_name );
 
    auto globals = global_properties.get();
+
    uint64_t seconds_since_epoch = current_time_point().sec_since_epoch();
+
    bool is_past_next_processed_time = 
       globals.last_time_processed == 0 || 
       seconds_since_epoch > (globals.last_time_processed + globals.claim_span_seconds);
@@ -310,8 +317,10 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
    if (is_past_next_processed_time) {
 
       uint64_t claimants_count = 0;
+
       claimants_table claimants( get_self(), get_self().value );
       auto claimants_by_day = claimants.get_index< "byday"_n >();
+
       auto claimants_lower = claimants_by_day.lower_bound(current_day);
       auto claimants_upper = claimants_by_day.upper_bound(current_day);
       for ( auto i = claimants_lower; i != claimants_upper; i++ ) {
@@ -322,7 +331,7 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
       uint64_t erps_amount = 0;
       uint64_t winner_amount = 0;
       uint64_t slice_size = 0;
-      
+
       if (claimants_count < 10) {
          slice_size = globals.issue_amount / (claimants_count + 3); // 3 is for the wps, erps, and winner
          wps_amount = slice_size;
@@ -334,6 +343,8 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
          slice_size = (globals.issue_amount - wps_amount - erps_amount) / (claimants_count + 1); // 1 is for winner
          winner_amount = slice_size;
       }
+
+      print(" slice size: ", slice_size);
 
       uint64_t slice_total = (slice_size * claimants_count) + wps_amount + erps_amount + winner_amount;
 
@@ -365,9 +376,11 @@ void daycointoken::makeclaim_process_claims( const name& account_name )
             "transfer"_n,
             make_tuple( get_self(), i->claimant, asset(slice_size, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" )
          ).send();*/
-         float slice_amount = slice_size;
+         uint64_t slice_amount = slice_size;
+         print("; slice amount: ", slice_amount);
          if (i->claimant == account_name) {
             slice_amount = slice_amount + winner_amount;
+            print("; winner amount: ", slice_amount);
          }
          daycointoken::transfer_day( "daycointoken"_n, i->claimant, asset(slice_amount, symbol(symbol_code("DAY"), 13)), "CLAIMANT PAYMENT" );
       }
