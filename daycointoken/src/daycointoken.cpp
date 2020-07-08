@@ -102,7 +102,7 @@ ACTION daycointoken::proposalvote(const name& account_name, uint64_t proposal_id
 
 ACTION daycointoken::create( const name& issuer, const asset& maximum_supply )
 {
-    require_auth( name("daycoinadmin") );
+    require_auth( get_self() );
 
     auto sym = maximum_supply.symbol;
     check( sym.is_valid(), "invalid symbol name" );
